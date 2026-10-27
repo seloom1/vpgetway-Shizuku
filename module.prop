@@ -1,0 +1,9 @@
+id=vpngetway
+name=vpngetway
+version=v1.0.0
+versionCode=100
+author=seloom1 (@seloom1) & Carlelieser
+description=بث اتصال الـ VPN عبر نقطة الاتصال Hotspot بدون روت | المطور: @seloom1 | قناة التلغرام: @freevpsiraq
+usesShellBridge=true
+webui=webui
+action=action.sh

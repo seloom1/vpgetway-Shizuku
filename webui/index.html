@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>vpngetway</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .notice-card {
+            background: rgba(33, 150, 243, 0.08);
+            border: 1px solid rgba(33, 150, 243, 0.25);
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #e3f2fd;
+        }
+        .notice-title {
+            font-weight: bold;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #90caf9;
+        }
+        .bytes-tag {
+            font-family: monospace;
+            font-size: 11px;
+            color: #81c784;
+            margin-top: 4px;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-title-row">
+                <span class="status-dot" id="status-dot"></span>
+                <h1>vpngetway</h1>
+            </div>
+            <p class="subtitle">بث الإنترنت والـ VPN عبر نقطة الاتصال Hotspot</p>
+        </header>
+
+        <!-- حقوق المطور وقناة التلغرام -->
+        <section class="card dev-card">
+            <div class="dev-info-row">
+                <div class="dev-badge">
+                    <span>👨‍💻</span>
+                    <span class="dev-label">المطور:</span>
+                    <a href="https://t.me/seloom1" target="_blank" class="dev-link">@seloom1</a>
+                </div>
+                <div class="dev-badge tg-badge">
+                    <span>📢</span>
+                    <span class="dev-label">القناة:</span>
+                    <a href="https://t.me/freevpsiraq" target="_blank" class="dev-link">@freevpsiraq</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- كروت الإحصائيات المباشرة -->
+        <section class="card stats-grid">
+            <div class="stat-item">
+                <span class="stat-label">حالة البث</span>
+                <span class="stat-value" id="status-display">فحص...</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">كرت التوجيه</span>
+                <span class="stat-value" id="vpn-display">--</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">المتصلون</span>
+                <span class="stat-value" id="clients-display">0</span>
+            </div>
+        </section>
+
+        <!-- تنبيه التحكم عبر Shizuku-Next -->
+        <div class="notice-card" id="control-notice">
+            <div class="notice-title">💡 تحكم فوري من قائمة الموديولات</div>
+            يمكنك تشغيل وإيقاف البث ومتابعة السجلات الحية مباشرة عبر زري <b>[الخدمة]</b> و <b>[الإجراء]</b> في بطاقة الموديول.
+        </div>
+
+        <!-- لوحة التحكم -->
+        <section class="card control-group">
+            <div class="select-box">
+                <label for="vpn-mode">وضع الـ VPN المقترن:</label>
+                <select id="vpn-mode">
+                    <option value="AUTO" selected>تلقائي (AUTO)</option>
+                    <option value="ALWAYS">صارم (ALWAYS - يتوقف عند انقطاع الـ VPN)</option>
+                    <option value="NEVER">تخطي (NEVER - بدون VPN)</option>
+                </select>
+            </div>
+
+            <div class="btn-group">
+                <button id="main-btn" class="btn btn-primary" onclick="handleToggleClick()">
+                    بدء البث
+                </button>
+                <button class="btn btn-secondary" onclick="refreshStatus()">
+                    تحديث الحالة
+                </button>
+            </div>
+        </section>
+
+        <!-- سجل العمليات المباشر -->
+        <section class="card">
+            <div class="log-header">
+                <h3>سجل العمليات المباشر</h3>
+                <div class="log-actions">
+                    <button class="btn-sm" onclick="refreshStatus()">تحديث</button>
+                    <button class="btn-sm" onclick="clearLogBox()">مسح</button>
+                </div>
+            </div>
+            <pre id="log-content">جاري قراءة حالة الخدمة الحية...</pre>
+        </section>
+
+        <!-- معلومات النظام والحقوق -->
+        <section class="card">
+            <div class="diag-text" id="diag-info">
+                الموديول: vpngetway v1.0.0 | محرك التوجيه: gVisor netstack + TestNetworkManager
+            </div>
+            <div class="credits-footer">
+                <span>المطور: <a href="https://t.me/seloom1" target="_blank">@seloom1</a></span>
+                <span>•</span>
+                <span>قناة التلغرام: <a href="https://t.me/freevpsiraq" target="_blank">@freevpsiraq</a></span>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        let isServiceRunning = false;
+        let pollTimer = null;
+
+        function getBridge() {
+            if (typeof window.Shizuku !== "undefined" && window.Shizuku !== null) return window.Shizuku;
+            if (typeof Shizuku !== "undefined" && Shizuku !== null) return Shizuku;
+            return null;
+        }
+
+        function formatBytes(bytes) {
+            if (!bytes || bytes === 0) return "0 B";
+            const k = 1024;
+            const sizes = ["B", "KB", "MB", "GB"];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+        }
+
+        function updateUI(status) {
+            const statusDot = document.getElementById("status-dot");
+            const statusDisplay = document.getElementById("status-display");
+            const vpnDisplay = document.getElementById("vpn-display");
+            const clientsDisplay = document.getElementById("clients-display");
+            const mainBtn = document.getElementById("main-btn");
+            const logBox = document.getElementById("log-content");
+            const diagInfo = document.getElementById("diag-info");
+
+            if (!status || status.state === "IDLE" || status.running === false) {
+                isServiceRunning = false;
+                statusDot.className = "status-dot";
+                statusDisplay.innerText = "متوقف";
+                statusDisplay.style.color = "#ef5350";
+                vpnDisplay.innerText = "--";
+                clientsDisplay.innerText = "0";
+                mainBtn.innerText = "بدء البث";
+                mainBtn.className = "btn btn-primary";
+                diagInfo.innerText = "الخدمة متوقفة حالياً. استخدم زر [الخدمة] أو [الإجراء] في Shizuku للبدء.";
+                return;
+            }
+
+            if (status.state === "ACTIVE" || status.running === true) {
+                isServiceRunning = true;
+                statusDot.className = "status-dot active";
+                statusDisplay.innerText = "نشط ومتصل";
+                statusDisplay.style.color = "#4caf50";
+                vpnDisplay.innerText = status.interface || "testtun0";
+                clientsDisplay.innerText = (status.clientCount !== undefined) ? status.clientCount : (status.clients || 0);
+                mainBtn.innerText = "إيقاف البث";
+                mainBtn.className = "btn btn-danger";
+
+                const upStr = formatBytes(status.bytesUp || 0);
+                const downStr = formatBytes(status.bytesDown || 0);
+
+                logBox.innerText = "=== الخدمة تعمل بنجاح ===\n" +
+                    "الحالة: نشط ومتصل (ACTIVE)\n" +
+                    "واجهة التوجيه: " + (status.interface || "testtun") + "\n" +
+                    "التفاصيل: " + (status.detail || "routing tethered clients") + "\n" +
+                    "البيانات المرفوعة: " + upStr + "\n" +
+                    "البيانات المحملة: " + downStr + "\n" +
+                    "عدد الأجهزة المتصلة: " + (status.clientCount || 0) + "\n" +
+                    "آخر تحديث: " + new Date().toLocaleTimeString("ar-EG");
+
+                diagInfo.innerHTML = "محرك gVisor نشط | الواجهة: <code>" + (status.interface || "testtun") + "</code> | الرفع: " + upStr + " | التحميل: " + downStr;
+                return;
+            }
+
+            if (status.state === "ERROR") {
+                isServiceRunning = false;
+                statusDot.className = "status-dot";
+                statusDisplay.innerText = "خطأ";
+                statusDisplay.style.color = "#ffa726";
+                mainBtn.innerText = "إعادة المحاولة";
+                logBox.innerText = "تنبيه من الخدمة:\n" + (status.detail || "Unknown error");
+            }
+        }
+
+        function loadStatusFromDisk() {
+            const xhr = new XMLHttpRequest();
+            xhr.overrideMimeType("application/json");
+            // جلب ملف status.json المحدث في الوقت الفعلي من قبل الخدمة
+            xhr.open("GET", "status.json?t=" + new Date().getTime(), true);
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200 || xhr.status === 0) {
+                        try {
+                            const data = JSON.parse(xhr.responseText);
+                            updateUI(data);
+                        } catch (e) {
+                            // محاولة قراءة المسار البديل
+                            tryFallbackStatus();
+                        }
+                    } else {
+                        tryFallbackStatus();
+                    }
+                }
+            };
+            xhr.onerror = function () {
+                tryFallbackStatus();
+            };
+            xhr.send(null);
+        }
+
+        function tryFallbackStatus() {
+            const xhr = new XMLHttpRequest();
+            xhr.overrideMimeType("application/json");
+            xhr.open("GET", "../status.json?t=" + new Date().getTime(), true);
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200 || xhr.status === 0) {
+                        try {
+                            const data = JSON.parse(xhr.responseText);
+                            updateUI(data);
+                            return;
+                        } catch (e) {}
+                    }
+                    updateUI(null);
+                }
+            };
+            xhr.send(null);
+        }
+
+        function refreshStatus() {
+            const logBox = document.getElementById("log-content");
+            loadStatusFromDisk();
+        }
+
+        function clearLogBox() {
+            document.getElementById("log-content").innerText = "تم مسح السجل.";
+        }
+
+        function handleToggleClick() {
+            const bridge = getBridge();
+            const logBox = document.getElementById("log-content");
+            const mode = document.getElementById("vpn-mode").value;
+
+            // إذا كان جسر Shizuku يدعم exec مباشرة
+            if (bridge && typeof bridge.exec === "function") {
+                const basePath = window.location.pathname.replace(/\/webui\/[^\/]*$/, '');
+                const cmd = isServiceRunning ? 
+                    ("sh " + basePath + "/scripts/stop.sh") :
+                    ("sh " + basePath + "/scripts/start.sh " + mode);
+                try {
+                    const res = bridge.exec(cmd);
+                    logBox.innerText = "نتيجة التنفيذ:\n" + res;
+                    setTimeout(refreshStatus, 1500);
+                    return;
+                } catch (e) {}
+            }
+
+            // في إصدار Shizuku-Next الحالي: التوجيه لاستخدام أزرار البطاقة
+            logBox.innerText = "ℹ️ ملاحظة هامة:\n" +
+                "في إصدار Shizuku-Next الحالي، يتم التحكم بالبدء والإيقاف مباشرة من واجهة قائمة الموديولات:\n" +
+                "1. انقر زر الرجوع [←] في الأعلى للعودة لبطاقة الموديول.\n" +
+                "2. انقر زر [الخدمة] للتشغيل كخدمة خلفية مستمرة، أو زر [الإجراء] للتشغيل السريع مع عرض السجلات المباشرة.\n" +
+                "الحالة الحية يتم تحديثها هنا تلقائياً.";
+        }
+
+        window.addEventListener("DOMContentLoaded", () => {
+            refreshStatus();
+            pollTimer = setInterval(refreshStatus, 3000);
+        });
+    </script>
+</body>
+</html>

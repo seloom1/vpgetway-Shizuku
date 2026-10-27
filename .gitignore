@@ -1,0 +1,8 @@
+# Runtime state and logs
+*.log
+daemon.pid
+status.json
+
+# OS/editor files
+.DS_Store
+Thumbs.db
