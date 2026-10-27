@@ -3,7 +3,7 @@ MODDIR="${MODDIR:-$(cd "$(dirname "$0")" && pwd)}"
 export MODDIR
 
 echo "============================================"
-echo "         vpngetway - Quick Action           "
+echo "      vpgetway-Shizuku - Quick Action      "
 echo "============================================"
 
 PIDFILE="$MODDIR/daemon.pid"
